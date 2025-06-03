@@ -32,7 +32,9 @@ export default function Header({
   handleSaveFields,
   isContractPreviewOpen,
   setIsContractPreviewOpen,
-  handleGenerateMagicLink
+  handleGenerateMagicLink,
+  contractorFillMode,      // <- add here
+  setContractorFillMode
 }) {
   const { fetchContractsForTemplate } = useTemplateContext();
   const [contracts, setContracts] = useState([]);
@@ -161,6 +163,14 @@ export default function Header({
               aria-label="Refresh Templates"
             >
               <FiRefreshCw />
+            </button>
+
+            <button 
+              onClick={() => setContractorFillMode(prev => !prev)}
+              className="toggle-fill-button"
+              aria-pressed={contractorFillMode}
+            >
+              {contractorFillMode ? 'Edit Fields' : 'Fill Fields'}
             </button>
           </div>
         )}

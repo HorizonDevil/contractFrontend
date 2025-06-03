@@ -15,6 +15,7 @@ import FillFormPanel from './FillFormPanel'
 import SignatureModal from './SignatureModal'
 import TemplateModal from './TemplateModal'
 import DataInspectorModal from './DataInspectorModal'
+import ContractorFillPanel from './ContractorFillPanel';
 import { FIELD_TYPES, INITIAL_FIELD } from '../../constants/fieldTypes'
 import { useTemplateContext } from '../../context/TemplateContext'; // top of the file
 import { uploadFilledContractPdf } from '../../services/api';
@@ -28,6 +29,8 @@ const PdfFormBuilder = ({ forceMode }) => {
   
   const [mode, setMode] = useState(forceMode || 'contractor')
   const currentRenderTask = useRef(null);
+  const [contractorFillMode, setContractorFillMode] = useState(false);
+
 
   const [isContractPreviewOpen, setIsContractPreviewOpen] = useState(false);
 
@@ -1043,6 +1046,8 @@ const generatePdfBlob = async () => {
          isContractPreviewOpen={isContractPreviewOpen}
       setIsContractPreviewOpen={setIsContractPreviewOpen}
       handleGenerateMagicLink={handleGenerateMagicLink}
+      contractorFillMode={contractorFillMode}
+      setContractorFillMode={setContractorFillMode}
       />
 
       <Toolbar
@@ -1063,52 +1068,62 @@ const generatePdfBlob = async () => {
       />
 
       <div className="workspace">
-        {mode === 'contractor' && (
-          <FieldConfigPanel
-            fields={fields}
-            activeField={activeField}
-            setActiveField={setActiveField}
-            fieldConfig={fieldConfig}
-            setFieldConfig={setFieldConfig}
-            updateFieldConfig={updateFieldConfig}
-            FIELD_TYPES={FIELD_TYPES}
-            linkedFields={linkedFields}
-            toggleFieldLink={toggleFieldLink}
-            hasOtherSignatureValues={hasOtherSignatureValues}
-            handleCopySignature={handleCopySignature}
-            duplicateField={duplicateField}
-            deleteField={deleteField}
-            currentPage={currentPage}
-          />
-        )}
+  {mode === 'contractor' && (
+    contractorFillMode ? (
+      <ContractorFillPanel
+        fields={fields}
+        updateFieldConfig={updateFieldConfig}
+        saveFieldsToBackend={saveFieldsToBackend}
+        templateId={templateId}
+      />
+    ) : (
+      <FieldConfigPanel
+        fields={fields}
+        activeField={activeField}
+        setActiveField={setActiveField}
+        fieldConfig={fieldConfig}
+        setFieldConfig={setFieldConfig}
+        updateFieldConfig={updateFieldConfig}
+        FIELD_TYPES={FIELD_TYPES}
+        linkedFields={linkedFields}
+        toggleFieldLink={toggleFieldLink}
+        hasOtherSignatureValues={hasOtherSignatureValues}
+        handleCopySignature={handleCopySignature}
+        duplicateField={duplicateField}
+        deleteField={deleteField}
+        currentPage={currentPage}
+      />
+    )
+  )}
 
-        {mode === 'user' && (
-          <FillFormPanel
-            fields={fields.filter(field => field.visible !== false)}  
-            updateFieldConfig={updateFieldConfig}
-            handleDownloadPdf={handleDownloadPdf}
-            handleOpenSignaturePad={handleOpenSignaturePad}
-          />
-        )}
+  {mode === 'user' && (
+    <FillFormPanel
+      fields={fields.filter(field => field.visible !== false)}  
+      updateFieldConfig={updateFieldConfig}
+      handleDownloadPdf={handleDownloadPdf}
+      handleOpenSignaturePad={handleOpenSignaturePad}
+    />
+  )}
 
-        <PdfViewer
-          pdfDoc={pdfDoc}
-          pdfContainerRef={pdfContainerRef}
-          pdfCanvasRef={pdfCanvasRef}
-          pageRendered={pageRendered}
-          renderPdfPage={renderPdfPage}
-          currentPage={currentPage}
-          mode={mode}
-          fields={fields}
-          activeField={activeField}
-          setActiveField={setActiveField}
-          handleMouseDown={handleMouseDown}
-          handleFileUpload={handleFileUpload}
-          handleOpenSignaturePad={handleOpenSignaturePad}
-          renderFieldValue={renderFieldValue}
-          isDragging={isDragging}
-        />
-      </div>
+  <PdfViewer
+    pdfDoc={pdfDoc}
+    pdfContainerRef={pdfContainerRef}
+    pdfCanvasRef={pdfCanvasRef}
+    pageRendered={pageRendered}
+    renderPdfPage={renderPdfPage}
+    currentPage={currentPage}
+    mode={mode}
+    fields={fields}
+    activeField={activeField}
+    setActiveField={setActiveField}
+    handleMouseDown={handleMouseDown}
+    handleFileUpload={handleFileUpload}
+    handleOpenSignaturePad={handleOpenSignaturePad}
+    renderFieldValue={renderFieldValue}
+    isDragging={isDragging}
+  />
+</div>
+
 
       {showSignaturePad && (
         <SignatureModal
