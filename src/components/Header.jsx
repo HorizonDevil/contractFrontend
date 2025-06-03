@@ -134,7 +134,7 @@ export default function Header({
               <option value="">Select Contract</option>
               {contracts.map(contract => (
                 <option key={contract._id} value={contract._id}>
-                  {contract.submittedBy || 'Anonymous'} - {new Date(contract.submittedAt).toLocaleDateString()}
+                  {new Date(contract.submittedAt).toLocaleDateString()} — ID: {contract._id}
                 </option>
               ))}
             </select>
