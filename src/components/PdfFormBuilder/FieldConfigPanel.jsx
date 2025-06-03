@@ -68,7 +68,7 @@ export default function FieldConfigPanel({
               <input
                 type="text"
                 value={fieldConfig.id}
-                readOnly
+                onChange={(e) => handleFieldChange('id', e.target.value)}
                 className="form-input"
               />
             </div>
@@ -97,6 +97,19 @@ export default function FieldConfigPanel({
                 ))}
               </select>
             </div>
+            <div className="form-group checkbox-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={fieldConfig.visible !== false} // default to true if undefined
+                  onChange={(e) => handleFieldChange('visible', e.target.checked)}
+                  className="checkbox-input"
+                />
+                <span className="checkbox-custom"></span>
+                Visible in Fill Mode
+              </label>
+            </div>
+
             
             {fieldConfig.type === 'signature' && (
               <div className="form-group">

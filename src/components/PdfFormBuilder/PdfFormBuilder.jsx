@@ -1084,7 +1084,7 @@ const generatePdfBlob = async () => {
 
         {mode === 'user' && (
           <FillFormPanel
-            fields={fields}
+            fields={fields.filter(field => field.visible !== false)}  
             updateFieldConfig={updateFieldConfig}
             handleDownloadPdf={handleDownloadPdf}
             handleOpenSignaturePad={handleOpenSignaturePad}
