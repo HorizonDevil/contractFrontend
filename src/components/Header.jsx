@@ -164,6 +164,8 @@ export default function Header({
             >
               <FiRefreshCw />
             </button>
+            
+
 
             <button 
               onClick={() => setContractorFillMode(prev => !prev)}
@@ -177,6 +179,9 @@ export default function Header({
 
         {mode === 'user' ? (
           <>
+          <button onClick={handleSaveFields} className="action-button secondary">
+              Save Data
+            </button>
             <button onClick={handleDownloadPdf} className="download-button">
               <FiDownload className="download-icon" />
               <span>Download PDF</span>
