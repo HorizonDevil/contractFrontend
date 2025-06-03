@@ -1066,7 +1066,7 @@ const generatePdfBlob = async () => {
         totalPages={totalPages}
         handlePageChange={handlePageChange}
       />
-
+ 
       <div className="workspace">
   {mode === 'contractor' && (
     contractorFillMode ? (
