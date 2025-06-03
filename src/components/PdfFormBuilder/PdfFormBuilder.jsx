@@ -379,14 +379,45 @@ const PdfFormBuilder = ({ forceMode }) => {
     saveToHistory(updatedFields);
   };
 
-  const deleteField = (id) => {
-    const newFields = fields.filter(field => field.id !== id)
-    setFields(newFields)
-    if (activeField === id) {
-      setActiveField(null)
-    }
-    saveToHistory(newFields)
+  const deleteField = async (id) => {
+  const newFields = fields.filter(field => field.id !== id)
+  setFields(newFields)
+  if (activeField === id) {
+    setActiveField(null)
   }
+  saveToHistory(newFields)
+
+  // Save updated fields to backend after delete
+  if (templateId) {
+    try {
+      const fieldsObj = Object.fromEntries(newFields.map(f => [f.id, f]))
+
+      const res = await fetch('http://localhost:3000/api/auth/update-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateID: templateId,
+          fields: fieldsObj,
+        }),
+      })
+
+      const result = await res.json()
+
+      if (!result.success) {
+        console.error(result.error)
+        alert('Failed to save fields after deletion')
+      } else {
+        alert('Field deleted and changes saved successfully!')
+      }
+    } catch (err) {
+      console.error('Error saving fields after deletion:', err)
+      alert('Failed to save fields after deletion due to network/server issue')
+    }
+  } else {
+    alert('Please save the template first before deleting fields.')
+  }
+}
+
 
   const duplicateField = (id) => {
     const fieldToDuplicate = fields.find(field => field.id === id)
