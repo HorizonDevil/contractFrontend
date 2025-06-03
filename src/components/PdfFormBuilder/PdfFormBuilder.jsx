@@ -30,6 +30,7 @@ const PdfFormBuilder = ({ forceMode }) => {
   const [mode, setMode] = useState(forceMode || 'contractor')
   const currentRenderTask = useRef(null);
   const [contractorFillMode, setContractorFillMode] = useState(false);
+  const [isUserContractSubmitted, setIsUserContractSubmitted] = useState(false);
 
 
   const [isContractPreviewOpen, setIsContractPreviewOpen] = useState(false);
@@ -888,7 +889,7 @@ const generatePdfBlob = async () => {
 
     // 👇 This is the missing line
     await uploadFilledContractPdf(formData);
-
+    setIsUserContractSubmitted(true);
     alert("✅ Contract submitted and PDF saved!");
   } catch (err) {
     console.error("Submit contract failed:", err);
@@ -1102,6 +1103,7 @@ const generatePdfBlob = async () => {
       updateFieldConfig={updateFieldConfig}
       handleDownloadPdf={handleDownloadPdf}
       handleOpenSignaturePad={handleOpenSignaturePad}
+      isUserContractSubmitted={isUserContractSubmitted}
     />
   )}
 

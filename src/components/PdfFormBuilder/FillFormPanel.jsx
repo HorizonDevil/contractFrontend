@@ -4,7 +4,8 @@ export default function FillFormPanel({
   fields,
   updateFieldConfig,
   handleDownloadPdf,
-  handleOpenSignaturePad // Now properly received as prop
+  handleOpenSignaturePad, // Now properly received as prop
+  isUserContractSubmitted
 }) {
   return (
     <div className="fill-sidebar">
@@ -18,7 +19,7 @@ export default function FillFormPanel({
                   {field.label}
                   {field.required && <span className="required-indicator">*</span>}
                 </label>
-                {renderFieldInput(field)}
+                {renderFieldInput(field, isUserContractSubmitted)}
               </div>
             ))
           ) : (
@@ -28,15 +29,18 @@ export default function FillFormPanel({
             </div>
           )}
         </div>
-        <button onClick={handleDownloadPdf} className="action-button primary">
-          <FiDownload className="action-icon" />
-          <span>Download Filled PDF</span>
-        </button>
+        {!isUserContractSubmitted && (
+          <button onClick={handleDownloadPdf} className="action-button primary">
+            <FiDownload className="action-icon" />
+            <span>Download Filled PDF</span>
+          </button>
+        )}
       </div>
     </div>
   )
 
-  function renderFieldInput(field) {
+  function renderFieldInput(field, isUserContractSubmitted) {
+    const disabled = isUserContractSubmitted;
     switch (field.type) {
       case 'text':
       case 'email':
@@ -49,6 +53,7 @@ export default function FillFormPanel({
             placeholder={field.placeholder}
             className="field-input"
             required={field.required}
+            disabled={disabled}
           />
         )
       case 'date':
@@ -59,6 +64,7 @@ export default function FillFormPanel({
             onChange={(e) => updateFieldConfig(field.id, { value: e.target.value })}
             className="field-input"
             required={field.required}
+            disabled={disabled}
           />
         )
       case 'checkbox':
@@ -71,6 +77,7 @@ export default function FillFormPanel({
               onChange={(e) => updateFieldConfig(field.id, { value: e.target.checked })}
               className="checkbox-input"
               required={field.required}
+              disabled={disabled}
             />
             <label htmlFor={`checkbox-${field.id}`} className="checkbox-label">
               {field.label}
@@ -94,6 +101,7 @@ export default function FillFormPanel({
                     handleOpenSignaturePad(field.id) // Now using the prop
                   }}
                   type="button"
+                  disabled={disabled}
                 >
                   <FiPenTool className="sign-icon" />
                   <span>Re-sign</span>
@@ -107,6 +115,7 @@ export default function FillFormPanel({
                     handleOpenSignaturePad(field.id) // Now using the prop
                 }}
                 type="button"
+                disabled={disabled}
               >
                 <FiPenTool className="sign-icon" />
                 <span>Sign Here</span>
