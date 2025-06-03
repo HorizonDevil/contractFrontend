@@ -1,5 +1,3 @@
-
-
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { FiX, FiCopy, FiTrash2, FiLink, FiLink2, FiSquare,FiCheckSquare } from 'react-icons/fi';
 import * as pdfjsLib from 'pdfjs-dist'
@@ -18,15 +16,26 @@ import SignatureModal from './SignatureModal'
 import TemplateModal from './TemplateModal'
 import DataInspectorModal from './DataInspectorModal'
 import { FIELD_TYPES, INITIAL_FIELD } from '../../constants/fieldTypes'
+import { useTemplateContext } from '../../context/TemplateContext'; // top of the file
+import { uploadFilledContractPdf } from '../../services/api';
+
+
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.js`
 
-const PdfFormBuilder = () => {
+const PdfFormBuilder = ({ forceMode }) => {
+
+  
+  const [mode, setMode] = useState(forceMode || 'contractor')
+  const currentRenderTask = useRef(null);
+
+  const [isContractPreviewOpen, setIsContractPreviewOpen] = useState(false);
+
   const [pdfDoc, setPdfDoc] = useState(null)
   const [pageRendered, setPageRendered] = useState(false)
   const [fields, setFields] = useState([])
   const [activeField, setActiveField] = useState(null)
-  const [mode, setMode] = useState('contractor')
+ 
   const [scale, setScale] = useState(1.5)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
@@ -41,11 +50,22 @@ const PdfFormBuilder = () => {
   const [showDataInspector, setShowDataInspector] = useState(false)
   const [templateId, setTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('')
-  const [templates, setTemplates] = useState([])
+  
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState(null)
-  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
+  
   const [uploadedPdfFile, setUploadedPdfFile] = useState(null)
+  const {
+  createAndStoreTemplate,
+  fetchTemplates,
+  templates,
+  submitContract,
+  isLoadingTemplates,
+  fetchTemplateById,
+  fetchContractsForTemplate
+
+  
+} = useTemplateContext()
 
   const pdfContainerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
@@ -85,96 +105,150 @@ const PdfFormBuilder = () => {
     }
   }, [history, historyIndex])
 
-  const fetchTemplates = async () => {
-    setIsLoadingTemplates(true)
-    try {
-      const response = await fetch('http://localhost:5000/api/templates')
-      if (!response.ok) throw new Error('Failed to fetch templates')
-      const data = await response.json()
-      setTemplates(data)
-    } catch (error) {
-      console.error('Error fetching templates:', error)
-      alert(`Error: ${error.message}`)
-    } finally {
-      setIsLoadingTemplates(false)
-    }
+  const handleGenerateMagicLink = async () => {
+  if (!templateId) {
+    alert("Please save the template first to generate a magic link.");
+    return;
   }
+
+  try {
+    const response = await fetch('http://localhost:3000/api/auth/generate-magic-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateId }),
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      prompt("🎉 Magic link generated. Share this with the user:", data.link);
+    } else {
+      alert("Failed to generate magic link: " + (data.error || "Unknown error"));
+    }
+  } catch (error) {
+    console.error("Magic link generation failed:", error);
+    alert("Failed to generate magic link due to network error.");
+  }
+};
+
+
+  //savefields to backend
+
+            const saveFieldsToBackend = async () => {
+  if (!templateId || fields.length === 0) {
+    alert('No fields to save or template not selected.');
+    return;
+  }
+
+  const fieldsObj = Object.fromEntries(
+    fields.map(field => [field.id, field])
+  );
+
+  try {
+    const res = await fetch('http://localhost:3000/api/auth/update-template', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        templateID: templateId,
+        fields: fieldsObj,
+      }),
+    });
+
+    const result = await res.json();
+
+    if (!result.success) {
+      console.error(result.error);
+      alert('Failed to save fields.');
+      return;
+    }
+
+    alert('✅ Fields saved successfully!');
+  } catch (err) {
+    console.error('Save error:', err);
+    alert('❌ Failed due to network/server issue.');
+  }
+};
+
+
+
+
+
+
 
   const loadTemplate = async (template) => {
-    try {
-      setSelectedTemplate(template)
-      setTemplateId(template.templateId)
-      setTemplateName(template.templateName)
-      
-      const pdfResponse = await fetch(template.pdfUrl)
-      const pdfBlob = await pdfResponse.blob()
-      const pdfArrayBuffer = await pdfBlob.arrayBuffer()
-      
-      const pdf = await pdfjsLib.getDocument(pdfArrayBuffer).promise
-      setPdfDoc(pdf)
-      setTotalPages(pdf.numPages)
-      setFields(template.fields || [])
-      setActiveField(null)
-      setCurrentPage(1)
-      renderPdfPage(pdf, 1)
-    } catch (error) {
-      console.error('Error loading template:', error)
-      alert('Failed to load template. Please try again.')
-    }
+  try {
+    setSelectedTemplate(template);
+    localStorage.setItem("lastUsedTemplateId", template.templateId);
+    setTemplateId(template.templateId);
+    setTemplateName(template.templateName);
+
+    const pdfUrl = `http://localhost:3000/api/auth/get-pdf/${template.templateId}`;
+    const response = await fetch(pdfUrl);
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+
+    // ✅ Use context to fetch full template from DB
+    const fullTemplate = await fetchTemplateById(template.templateId);
+    const fieldArray = Object.values(fullTemplate?.fields || {});
+
+    setPdfDoc(pdf);
+    setTotalPages(pdf.numPages);
+    setFields(fieldArray);
+    setActiveField(null);
+    setCurrentPage(1);
+    renderPdfPage(pdf, 1);
+  } catch (error) {
+    console.error('Error loading template:', error);
+    alert('Failed to load template. Please try again.');
   }
+};
 
-  const saveAsTemplate = async (e) => {
-    if (e) {
-      e.preventDefault()
-      e.stopPropagation()
-    }
 
-    if (!pdfDoc || !templateId || !templateName || !uploadedPdfFile) {
-      alert('Please provide a Template ID and Template Name')
-      return
-    }
 
-    const formData = new FormData()
-    formData.append('templateId', templateId)
-    formData.append('templateName', templateName)
-    formData.append('fields', JSON.stringify(fields))
-    formData.append('pdf', uploadedPdfFile)
+      const saveAsTemplate = async (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
 
-    try {
-      const response = await fetch('http://localhost:5000/api/templates', {
-        method: 'POST',
-        body: formData
-      })
+      if (!pdfDoc || !templateId || !templateName || !uploadedPdfFile) {
+        alert('Please provide a Template ID, Template Name, and PDF');
+        return;
+      }
 
-      if (!response.ok) throw new Error('Failed to save template')
-      
-      const data = await response.json()
-      alert('Template saved successfully!')
-      setShowTemplateModal(false)
-      fetchTemplates()
-    } catch (error) {
-      console.error('Error saving template:', error)
-      alert(`Error: ${error.message}`)
-    }
-  }
+      const result = await createAndStoreTemplate({
+        templateId,
+        templateName,
+        fields,
+        uploadedPdfFile,
+      });
+
+      if (result.success) {
+        const newId = result.data.template._id; // ✅ get actual MongoDB ObjectId
+          setTemplateId(newId);                   // ✅ update state with real _id
+          alert('Template uploaded successfully to backend!');
+          console.log("Now using templateId:", newId); // optional debug
+          setShowTemplateModal(false);
+      } else {
+        alert('Failed to upload template.');
+        console.error(result.error);
+      }
+    };
+
+  
 
   const fetchContractData = async () => {
-    if (!templateId) return
-    
-    setIsLoadingData(true)
-    try {
-      const response = await fetch(`http://localhost:5000/api/contracts/${templateId}`)
-      if (!response.ok) throw new Error(`Server error: ${response.status}`)
-      
-      const data = await response.json()
-      setContractData(data)
-    } catch (error) {
-      console.error('Failed to fetch contract data:', error)
-      alert(`Error: ${error.message}`)
-    } finally {
-      setIsLoadingData(false)
-    }
+  if (!templateId) return;
+  setIsLoadingData(true);
+  try {
+    const contracts = await fetchContractsForTemplate(templateId);
+    setContractData(contracts);
+  } catch (err) {
+    console.error('Failed to fetch contract data:', err);
+  } finally {
+    setIsLoadingData(false);
   }
+};
 
   const toggleDataInspector = async () => {
     setShowDataInspector(!showDataInspector)
@@ -214,27 +288,37 @@ const PdfFormBuilder = () => {
     }
   }
 
-  const renderPdfPage = async (pdf, pageNum) => {
-    try {
-      const page = await pdf.getPage(pageNum)
-      const viewport = page.getViewport({ scale })
-      
-      const canvas = pdfCanvasRef.current
-      const context = canvas.getContext('2d')
-      canvas.height = viewport.height
-      canvas.width = viewport.width
+        const renderPdfPage = async (pdf, pageNum) => {
+  try {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
 
-      await page.render({
-        canvasContext: context,
-        viewport: viewport
-      }).promise
+    const canvas = pdfCanvasRef.current;
+    const context = canvas.getContext('2d');
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
 
-      setPageRendered(true)
-    } catch (error) {
-      console.error('PDF rendering error:', error)
-      alert('Failed to render PDF page.')
+    if (currentRenderTask.current) {
+      currentRenderTask.current.cancel();
     }
+
+    const task = page.render({ canvasContext: context, viewport });
+    currentRenderTask.current = task;
+    await task.promise;
+
+    setPageRendered(true);
+  } catch (error) {
+    if (error?.name === "RenderingCancelledException") {
+      // Silently ignore expected cancellation
+      return;
+    }
+
+    console.error('PDF rendering error:', error);
+    alert('Failed to render PDF page.');
   }
+};
+
+
 
   const handlePageChange = (newPage) => {
     if (newPage < 1 || newPage > totalPages) return
@@ -243,58 +327,57 @@ const PdfFormBuilder = () => {
   }
 
   const addField = (type) => {
-  const newField = {
-    ...INITIAL_FIELD,
-    id: `field_${Date.now()}`,
-    type,
-    page: currentPage, // Add current page to the field
-    label: `${type.charAt(0).toUpperCase() + type.slice(1)} Field`,
-    ...(type === 'signature' && { 
-      fieldId: `sig-group-${Date.now()}`,
-      width: 200,
-      height: 80 
-    }),
-    color: FIELD_TYPES.find(t => t.value === type)?.color || '#6366f1'
+    const newField = {
+      ...INITIAL_FIELD,
+      id: `field_${Date.now()}`,
+      type,
+      page: currentPage,
+      label: `${type.charAt(0).toUpperCase() + type.slice(1)} Field`,
+      ...(type === 'signature' && { 
+        fieldId: `sig-group-${Date.now()}`,
+        width: 200,
+        height: 80 
+      }),
+      color: FIELD_TYPES.find(t => t.value === type)?.color || '#6366f1'
+    };
+
+    const newFields = [...fields, newField];
+    setFields(newFields);
+    setActiveField(newField.id);
+    setFieldConfig(newField);
+    saveToHistory(newFields);
   };
 
-  const newFields = [...fields, newField];
-  setFields(newFields);
-  setActiveField(newField.id);
-  setFieldConfig(newField);
-  saveToHistory(newFields);
-};
   const updateFieldConfig = (id, updates) => {
-  const fieldToUpdate = fields.find(field => field.id === id);
-  if (!fieldToUpdate) return fields;
+    const fieldToUpdate = fields.find(field => field.id === id);
+    if (!fieldToUpdate) return fields;
 
-  // Handle signature field updates
-  if (fieldToUpdate.type === 'signature' && updates.value !== undefined && fieldToUpdate.fieldId) {
-    const updatedFields = fields.map(field => {
-      if (field.type === 'signature' && field.fieldId === fieldToUpdate.fieldId) {
-        return { ...field, ...updates };
+    if (fieldToUpdate.type === 'signature' && updates.value !== undefined && fieldToUpdate.fieldId) {
+      const updatedFields = fields.map(field => {
+        if (field.type === 'signature' && field.fieldId === fieldToUpdate.fieldId) {
+          return { ...field, ...updates };
+        }
+        return field.id === id ? { ...field, ...updates } : field;
+      });
+      
+      setFields(updatedFields);
+      if (activeField === id) {
+        setFieldConfig(prev => ({ ...prev, ...updates }));
       }
-      return field.id === id ? { ...field, ...updates } : field;
-    });
+      saveToHistory(updatedFields);
+      return;
+    }
+
+    const updatedFields = fields.map(field => 
+      field.id === id ? { ...field, ...updates } : field
+    );
     
     setFields(updatedFields);
     if (activeField === id) {
       setFieldConfig(prev => ({ ...prev, ...updates }));
     }
     saveToHistory(updatedFields);
-    return;
-  }
-
-  // Regular field update
-  const updatedFields = fields.map(field => 
-    field.id === id ? { ...field, ...updates } : field
-  );
-  
-  setFields(updatedFields);
-  if (activeField === id) {
-    setFieldConfig(prev => ({ ...prev, ...updates }));
-  }
-  saveToHistory(updatedFields);
-};
+  };
 
   const deleteField = (id) => {
     const newFields = fields.filter(field => field.id !== id)
@@ -404,26 +487,24 @@ const PdfFormBuilder = () => {
   }
 
   const handleSaveSignature = () => {
-  if (!signaturePadRef.current || !signatureFieldId) return;
-  
-  const canvas = signaturePadRef.current.getCanvas();
-  const signatureUrl = canvas.toDataURL();
-  
-  // Find the field being edited
-  const fieldToUpdate = fields.find(f => f.id === signatureFieldId);
-  if (!fieldToUpdate) return;
+    if (!signaturePadRef.current || !signatureFieldId) return;
+    
+    const canvas = signaturePadRef.current.getCanvas();
+    const signatureUrl = canvas.toDataURL();
+    
+    const fieldToUpdate = fields.find(f => f.id === signatureFieldId);
+    if (!fieldToUpdate) return;
 
-  // Update all fields in the same group
-  const updatedFields = fields.map(field => {
-    if (field.type === 'signature' && field.fieldId === fieldToUpdate.fieldId) {
-      return { ...field, value: signatureUrl };
-    }
-    return field;
-  });
+    const updatedFields = fields.map(field => {
+      if (field.type === 'signature' && field.fieldId === fieldToUpdate.fieldId) {
+        return { ...field, value: signatureUrl };
+      }
+      return field;
+    });
 
-  setFields(updatedFields);
-  setShowSignaturePad(false);
-};
+    setFields(updatedFields);
+    setShowSignaturePad(false);
+  };
 
   const handleClearSignature = () => {
     if (signaturePadRef.current) {
@@ -465,229 +546,323 @@ const PdfFormBuilder = () => {
     )
   }, [activeField, fields])
 
-        const handleDownloadPdf = async () => {
-          if (!pdfDoc || !pdfCanvasRef.current) {
-            alert('Please upload and render a PDF first');
-            return;
-          }
-
-  try {
-    setExportProgress(0);
-    
-    // Create a new jsPDF instance
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
-
-    // Process each page sequentially
-    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-      setExportProgress(Math.round((pageNum / totalPages) * 50));
-      
-      // Render the PDF page
-      const page = await pdfDoc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 1.5 });
-      
-      // Create a temporary canvas for each page
-      const canvas = document.createElement('canvas');
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-      const context = canvas.getContext('2d');
-      
-      // Render the PDF page to canvas
-      await page.render({
-        canvasContext: context,
-        viewport: viewport
-      }).promise;
-
-      // Create a container for the page and fields
-      const container = document.createElement('div');
-      container.style.position = 'absolute';
-      container.style.left = '-9999px';
-      container.style.width = `${canvas.width}px`;
-      container.style.height = `${canvas.height}px`;
-      document.body.appendChild(container);
-
-      // Add the PDF canvas
-      container.appendChild(canvas);
-
-      // Add fields for this page
-      const pageFields = fields.filter(field => field.page === pageNum);
-      const fieldsContainer = document.createElement('div');
-      fieldsContainer.style.position = 'absolute';
-      fieldsContainer.style.top = '0';
-      fieldsContainer.style.left = '0';
-      fieldsContainer.style.width = '100%';
-      fieldsContainer.style.height = '100%';
-
-      // Process signature fields first
-      const signatureFields = pageFields.filter(f => f.type === 'signature' && f.value);
-      const loadedImages = await Promise.all(
-        signatureFields.map(field => {
-          return new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.onload = () => resolve({ id: field.id, img });
-            img.onerror = () => resolve(null);
-            img.src = field.value;
-          });
-        })
-      );
-
-      // Add all fields to the container
-      pageFields.forEach(field => {
-        const fieldDiv = document.createElement('div');
-        fieldDiv.style.cssText = `
-          position: absolute;
-          left: ${field.x}px;
-          top: ${field.y}px;
-          width: ${field.width}px;
-          height: ${field.height}px;
-          background-color: transparent;
-          padding: 0.2rem;
-          box-sizing: border-box;
-        `;
-
-        if (field.type === 'checkbox') {
-          const label = document.createElement('label');
-          label.style.cssText = `
-            display: flex;
-            align-items: center;
-            height: 100%;
-            cursor: default;
-          `;
-          
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.checked = field.value || false;
-          checkbox.disabled = true;
-          checkbox.style.cssText = `
-            width: auto;
-            height: auto;
-            margin-right: 5px;
-          `;
-          
-          const text = document.createElement('span');
-          text.textContent = field.label || '';
-          text.style.cssText = `
-            color: #000;
-            font-size: 14px;
-          `;
-          
-          label.appendChild(checkbox);
-          label.appendChild(text);
-          fieldDiv.appendChild(label);
-        } 
-        else if (field.type === 'signature' && field.value) {
-          const img = document.createElement('img');
-          const loadedImg = loadedImages.find(i => i?.id === field.id);
-          img.src = loadedImg ? loadedImg.img.src : field.value;
-          img.style.cssText = `
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            background-color: white;
-          `;
-          fieldDiv.appendChild(img);
-        }
-        else {
-          const inputElement = document.createElement('input');
-          inputElement.type = field.type === 'date' ? 'text' : field.type;
-          inputElement.value = field.value || '';
-          inputElement.disabled = true;
-          inputElement.style.cssText = `
-            width: 100%;
-            height: 100%;
-            background: transparent;
-            border: 1px solid #ccc;
-            padding: 4px;
-            color: #000;
-            font-size: 14px;
-            box-sizing: border-box;
-          `;
-          
-          if (field.type === 'date' && field.value) {
-            const date = new Date(field.value);
-            inputElement.value = date.toLocaleDateString();
-          }
-          
-          fieldDiv.appendChild(inputElement);
-        }
-
-        fieldsContainer.appendChild(fieldDiv);
-      });
-
-      container.appendChild(fieldsContainer);
-
-      // Convert to image
-      const canvasImage = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        windowWidth: canvas.width,
-        windowHeight: canvas.height
-      });
-
-      // Add page to PDF
-      const imgData = canvasImage.toDataURL('image/png');
-      const imgWidth = 210; // A4 width in mm
-      const imgHeight = (canvasImage.height * imgWidth) / canvasImage.width;
-
-      if (pageNum > 1) {
-        pdf.addPage();
-      }
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-
-      // Clean up
-      document.body.removeChild(container);
-      setExportProgress(Math.round((pageNum / totalPages) * 100));
-    }
-
-    // Save the complete PDF
-    pdf.save('filled-form.pdf');
-    setExportProgress(100);
-  } catch (error) {
-    console.error('PDF generation error:', error);
-    alert(`Failed to generate PDF: ${error.message}`);
-    setExportProgress(0);
-  }
-};
-
-  const handleSubmitContract = async () => {
-    if (!templateId || !templateName) {
-      alert('No template loaded')
-      return
+  const handleDownloadPdf = async () => {
+    if (!pdfDoc || !pdfCanvasRef.current) {
+      alert('Please upload and render a PDF first');
+      return;
     }
 
     try {
-      const contractFields = fields.map(field => ({
-        fieldId: field.id,
-        fieldType: field.type,
-        value: field.value,
-        label: field.label
-      }))
-
-      const response = await fetch('http://localhost:5000/api/contracts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId,
-          templateName,
-          fields: contractFields
-        })
-      })
-
-      if (!response.ok) throw new Error('Failed to submit contract')
+      setExportProgress(0);
       
-      const data = await response.json()
-      alert('Contract submitted successfully!')
-      console.log('Submitted contract:', data)
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        setExportProgress(Math.round((pageNum / totalPages) * 50));
+        
+        const page = await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.5 });
+        
+        const canvas = document.createElement('canvas');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        const context = canvas.getContext('2d');
+        
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise;
+
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        container.style.width = `${canvas.width}px`;
+        container.style.height = `${canvas.height}px`;
+        document.body.appendChild(container);
+
+        container.appendChild(canvas);
+
+        const pageFields = fields.filter(field => field.page === pageNum);
+        const fieldsContainer = document.createElement('div');
+        fieldsContainer.style.position = 'absolute';
+        fieldsContainer.style.top = '0';
+        fieldsContainer.style.left = '0';
+        fieldsContainer.style.width = '100%';
+        fieldsContainer.style.height = '100%';
+
+        const signatureFields = pageFields.filter(f => f.type === 'signature' && f.value);
+        const loadedImages = await Promise.all(
+          signatureFields.map(field => {
+            return new Promise((resolve) => {
+              const img = new Image();
+              img.crossOrigin = 'Anonymous';
+              img.onload = () => resolve({ id: field.id, img });
+              img.onerror = () => resolve(null);
+              img.src = field.value;
+            });
+          })
+        );
+
+        pageFields.forEach(field => {
+          const fieldDiv = document.createElement('div');
+          fieldDiv.style.cssText = `
+            position: absolute;
+            left: ${field.x}px;
+            top: ${field.y}px;
+            width: ${field.width}px;
+            height: ${field.height}px;
+            background-color: transparent;
+            padding: 0.2rem;
+            box-sizing: border-box;
+          `;
+
+          if (field.type === 'checkbox') {
+            const label = document.createElement('label');
+            label.style.cssText = `
+              display: flex;
+              align-items: center;
+              height: 100%;
+              cursor: default;
+            `;
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = field.value || false;
+            checkbox.disabled = true;
+            checkbox.style.cssText = `
+              width: auto;
+              height: auto;
+              margin-right: 5px;
+            `;
+            
+            const text = document.createElement('span');
+            text.textContent = field.label || '';
+            text.style.cssText = `
+              color: #000;
+              font-size: 14px;
+            `;
+            
+            label.appendChild(checkbox);
+            label.appendChild(text);
+            fieldDiv.appendChild(label);
+          } 
+          else if (field.type === 'signature' && field.value) {
+            const img = document.createElement('img');
+            const loadedImg = loadedImages.find(i => i?.id === field.id);
+            img.src = loadedImg ? loadedImg.img.src : field.value;
+            img.style.cssText = `
+              width: 100%;
+              height: 100%;
+              object-fit: contain;
+              background-color: white;
+            `;
+            fieldDiv.appendChild(img);
+          }
+          else {
+            const inputElement = document.createElement('input');
+            inputElement.type = field.type === 'date' ? 'text' : field.type;
+            inputElement.value = field.value || '';
+            inputElement.disabled = true;
+            inputElement.style.cssText = `
+              width: 100%;
+              height: 100%;
+              background: transparent;
+              border: 1px solid #ccc;
+              padding: 4px;
+              color: #000;
+              font-size: 14px;
+              box-sizing: border-box;
+            `;
+            
+            if (field.type === 'date' && field.value) {
+              const date = new Date(field.value);
+              inputElement.value = date.toLocaleDateString();
+            }
+            
+            fieldDiv.appendChild(inputElement);
+          }
+
+          fieldsContainer.appendChild(fieldDiv);
+        });
+
+        container.appendChild(fieldsContainer);
+
+        const canvasImage = await html2canvas(container, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          windowWidth: canvas.width,
+          windowHeight: canvas.height
+        });
+
+        const imgData = canvasImage.toDataURL('image/png');
+        const imgWidth = 210;
+        const imgHeight = (canvasImage.height * imgWidth) / canvasImage.width;
+
+        if (pageNum > 1) {
+          pdf.addPage();
+        }
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+
+        document.body.removeChild(container);
+        setExportProgress(Math.round((pageNum / totalPages) * 100));
+      }
+
+      pdf.save('filled-form.pdf');
+      setExportProgress(100);
     } catch (error) {
-      console.error('Contract submission error:', error)
-      alert(`Error submitting contract: ${error.message}`)
+      console.error('PDF generation error:', error);
+      alert(`Failed to generate PDF: ${error.message}`);
+      setExportProgress(0);
     }
+  };
+
+const generatePdfBlob = async () => {
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1.5 });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const context = canvas.getContext('2d');
+
+    await page.render({ canvasContext: context, viewport }).promise;
+
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    container.style.width = `${canvas.width}px`;
+    container.style.height = `${canvas.height}px`;
+    document.body.appendChild(container);
+
+    container.appendChild(canvas);
+
+    const pageFields = fields.filter(f => f.page === pageNum);
+    const fieldsContainer = document.createElement('div');
+    fieldsContainer.style.position = 'absolute';
+    fieldsContainer.style.top = '0';
+    fieldsContainer.style.left = '0';
+    fieldsContainer.style.width = '100%';
+    fieldsContainer.style.height = '100%';
+
+    const signatureFields = pageFields.filter(f => f.type === 'signature' && f.value);
+    const loadedImages = await Promise.all(
+      signatureFields.map(field => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.onload = () => resolve({ id: field.id, img });
+          img.onerror = () => resolve(null);
+          img.src = field.value;
+        });
+      })
+    );
+
+    pageFields.forEach(field => {
+      const fieldDiv = document.createElement('div');
+      fieldDiv.style.cssText = `
+        position: absolute;
+        left: ${field.x}px;
+        top: ${field.y}px;
+        width: ${field.width}px;
+        height: ${field.height}px;
+        background-color: transparent;
+      `;
+
+      if (field.type === 'signature' && field.value) {
+        const img = document.createElement('img');
+        const loadedImg = loadedImages.find(i => i?.id === field.id);
+        img.src = loadedImg ? loadedImg.img.src : field.value;
+        img.style.cssText = `width: 100%; height: 100%; object-fit: contain; background-color: white;`;
+        fieldDiv.appendChild(img);
+      } else {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = field.value || '';
+        input.disabled = true;
+        input.style.cssText = `
+          width: 100%;
+          height: 100%;
+          border: 1px solid #ccc;
+          background: transparent;
+          color: #000;
+          font-size: 14px;
+        `;
+        fieldDiv.appendChild(input);
+      }
+
+      fieldsContainer.appendChild(fieldDiv);
+    });
+
+    container.appendChild(fieldsContainer);
+
+    const imageCanvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      windowWidth: canvas.width,
+      windowHeight: canvas.height
+    });
+
+    const imgData = imageCanvas.toDataURL('image/png');
+    const imgWidth = 210;
+    const imgHeight = (imageCanvas.height * imgWidth) / imageCanvas.width;
+
+    if (pageNum > 1) {
+      pdf.addPage();
+    }
+    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+
+    document.body.removeChild(container);
   }
+
+  return pdf.output('blob'); // 📦 Return the PDF blob
+};
+
+
+  const handleSubmitContract = async () => {
+  if (!templateId || fields.length === 0) {
+    alert("No data to submit.");
+    return;
+  }
+
+  try {
+    const result = await submitContract({
+      templateId,
+      submittedBy: "user@example.com",
+      fields,
+    });
+
+    if (!result.success) {
+      alert("Contract submission failed");
+      return;
+    }
+
+    const contractId = result.contract._id;
+    const pdfBlob = await generatePdfBlob();
+
+    const formData = new FormData();
+    formData.append("contractId", contractId);
+    formData.append("pdf", pdfBlob, "filled-contract.pdf");
+
+    // 👇 This is the missing line
+    await uploadFilledContractPdf(formData);
+
+    alert("✅ Contract submitted and PDF saved!");
+  } catch (err) {
+    console.error("Submit contract failed:", err);
+    alert("Something went wrong while submitting.");
+  }
+};
+
+
 
   const renderFieldValue = (field) => {
     switch (field.type) {
@@ -780,6 +955,41 @@ const PdfFormBuilder = () => {
     fetchTemplates()
   }, [])
 
+  useEffect(() => {
+  if (showDataInspector || isContractPreviewOpen) {
+    document.body.classList.add('contract-preview-open');
+  } else {
+    document.body.classList.remove('contract-preview-open');
+  }
+}, [showDataInspector, isContractPreviewOpen]);
+
+
+  
+
+
+  useEffect(() => {
+  const lastId = localStorage.getItem("lastUsedTemplateId");
+
+  // Auto-load the template when forceMode is 'user' and no template is loaded
+  if (forceMode === 'user' && lastId && !pdfDoc) {
+    const selected = templates.find(t => t.templateId === lastId);
+    if (selected) {
+      loadTemplate(selected);
+    } else {
+      fetchTemplateById(lastId).then(template => {
+        if (template) {
+          loadTemplate({
+            templateId: template._id,
+            templateName: template.templateName,
+            pdfUrl: `http://localhost:3000/${template.pdfPath}`
+          });
+        }
+      });
+    }
+  }
+}, [forceMode, templates, pdfDoc, fetchTemplateById]);
+
+
   return (
     <div className={`pdf-form-builder ${isDragging ? 'dragging' : ''}`}>
       <Header
@@ -798,6 +1008,10 @@ const PdfFormBuilder = () => {
         toggleDataInspector={toggleDataInspector}
         fetchTemplates={fetchTemplates}
         isLoadingTemplates={isLoadingTemplates}
+        handleSaveFields={saveFieldsToBackend}
+         isContractPreviewOpen={isContractPreviewOpen}
+      setIsContractPreviewOpen={setIsContractPreviewOpen}
+      handleGenerateMagicLink={handleGenerateMagicLink}
       />
 
       <Toolbar
@@ -824,7 +1038,7 @@ const PdfFormBuilder = () => {
             activeField={activeField}
             setActiveField={setActiveField}
             fieldConfig={fieldConfig}
-            setFieldConfig={setFieldConfig} // Add this line
+            setFieldConfig={setFieldConfig}
             updateFieldConfig={updateFieldConfig}
             FIELD_TYPES={FIELD_TYPES}
             linkedFields={linkedFields}

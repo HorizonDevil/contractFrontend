@@ -41,6 +41,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+
+
 .pdf-form-builder {
   display: flex;
   flex-direction: column;
@@ -52,6 +54,54 @@ body {
 .pdf-form-builder.dragging {
   cursor: grabbing;
 }
+
+
+
+.contract-preview-modal {
+  position: fixed;
+  top: 10%;
+  left: 10%;
+  width: 80%;
+  height: 80%;
+  background: white;
+  border-radius: 8px;
+  z-index: 999999999;
+  box-shadow: 0 0 10px rgba(0,0,0,0.25);
+  padding: 1rem;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-actions {
+  margin-top: 1rem;
+  text-align: right;
+}
+
+
+.save-button {
+  display: flex;
+  align-items: center;
+  background-color: #4CAF50;
+  color: white;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 8px;
+  font-size: 13px;
+  transition: background-color 0.2s ease;
+}
+
+.save-button:hover {
+  background-color: #43a047;
+}
+
+.save-button .download-icon {
+  margin-right: 6px;
+}
+
 
 .app-header {
   display: flex;
@@ -432,6 +482,28 @@ body {
   color: var(--text-light);
 }
 
+.magic-link-button {
+  margin-left: 10px;
+  background-color: #ec4899;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+.magic-link-button:hover {
+  background-color: #db2777;
+}
+
+.magic-link-icon {
+  margin-right: 6px;
+}
+
+
 .form-input, .form-select {
   width: 100%;
   padding: 0.5rem 0.75rem;
@@ -665,7 +737,14 @@ body {
   cursor: move;
   padding: 0.25rem;
   user-select: none;
+  
 }
+
+body.contract-preview-open .form-field {
+  display: none !important;
+}
+
+
 
 .form-field.active {
   background: rgba(99, 102, 241, 0.1);

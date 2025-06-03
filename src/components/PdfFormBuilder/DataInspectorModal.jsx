@@ -43,26 +43,26 @@ export default function DataInspectorModal({
                       {(contract.id || contract._id)?.substring(0, 6) || 'N/A'}...
                     </td>
                     {fields.map(field => {
-                      const fieldData = contract.fields?.find(f => f.fieldId === field.id)
-                      return (
-                        <td key={`${contract.id}-${field.id}`}>
-                          {fieldData ? (
-                            fieldData.fieldType === 'signature' ? (
-                              <img 
-                                src={fieldData.value} 
-                                alt="Signature" 
-                                className="signature-thumbnail"
-                              />
-                            ) : (
-                              String(fieldData.value || '')
-                            )
-                          ) : (
-                            <span className="empty-value">-</span>
-                          )}
-                        </td>
-                      )
-                    })}
-                    <td>{contract.createdAt ? new Date(contract.createdAt).toLocaleDateString() : 'N/A'}</td>
+                              const fieldData = contract.fields?.[field.id];
+                              return (
+                                <td key={`${contract._id}-${field.id}`}>
+                                  {fieldData ? (
+                                    field.type === 'signature' ? (
+                                      <img 
+                                        src={fieldData.value} 
+                                        alt="Signature" 
+                                        className="signature-thumbnail"
+                                      />
+                                    ) : (
+                                      String(fieldData.value || '')
+                                    )
+                                  ) : (
+                                    <span className="empty-value">-</span>
+                                  )}
+                                </td>
+                              )
+                            })}
+                    <td>{contract.submittedAt ? new Date(contract.submittedAt).toLocaleDateString() : 'N/A'}</td>
                   </tr>
                 ))}
               </tbody>
